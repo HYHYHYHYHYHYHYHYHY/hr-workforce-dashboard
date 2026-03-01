@@ -262,7 +262,7 @@ def update_dashboard(dept, loc, status):
     # Performance ratings
     perf_order = ["Exceeds", "Meets", "Below"]
     pc = (dff["performance"].value_counts()
-          .reindex(perf_order, fill_value=0).reset_index())h
+          .reindex(perf_order, fill_value=0).reset_index())
     pc.columns = ["rating", "count"]
     perf_bar = px.bar(pc, x="rating", y="count", title="Performance Ratings",
                       color="rating",
