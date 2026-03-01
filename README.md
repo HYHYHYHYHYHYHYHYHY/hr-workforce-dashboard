@@ -5,167 +5,301 @@
 ![Render](https://img.shields.io/badge/Deployed%20on-Render-46E3B7?logo=render&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-An interactive HR Workforce Dashboard built with **Python**, **Plotly Dash**, and **Pandas**. Designed as a portfolio project to demonstrate data visualisation and analytics skills comparable to Power BI / Tableau — but fully open-source and deployable via a single Python file.
+An interactive HR analytics dashboard built with Python, Dash, Plotly, and Pandas.
+The app is intentionally written in a single `app.py` so it is easy to read end-to-end while learning.
 
-> 🔴 **[View Live Demo](https://hr-workforce-dashboard.onrender.com)** — fully interactive, hosted on Render (free tier; may take ~30s to wake up)
-
----
-
-## Screenshot
-
-> *(Add a screenshot of your dashboard here — drag and drop an image into this README)*
+> 🔴 **[View Live Demo](https://hr-workforce-dashboard.onrender.com)** (Render free tier may take ~30s to wake up)
 
 ---
 
-## Features
+## What This Project Teaches
 
-### KPI Cards
-| KPI Card | Description |
-|---|---|
-| Team Size | Filtered headcount |
-| Currently Active / Separated | Current status split |
-| Attrition | Share of separations |
-| Average Service | Mean years of service |
-| Strategic People Metrics | Women representation, internal fills, vacancy pressure, succession coverage |
+If you are learning coding/data apps, this project is useful because it combines:
+
+- **Data modeling** (separate tables for employees, terminations, internal moves, positions, finance)
+- **Business KPI design** (attrition, voluntary ratio, internal fill rate, vacancy pressure)
+- **Reactive UI programming** (one callback updates all cards and charts from filters)
+- **Storytelling with visuals** (department, geography, gender, tenure, performance, termination reasons)
+
+---
+
+## Dashboard Features
+
+### KPI Cards (top row)
+
+- **Currently Active**
+- **Terminations (Year)**
+- **Attrition**
+- **Voluntary termination ratio YTD**
+- **Average Service**
+- **Average Pay** *(only shown when `SHOW_SALARY = True`)*
+
+### Strategic Metric Tiles
+
+- Internal role fills (YTD)
+- Women across workforce
+- Women in leadership roles
+- Women promoted this year
+- Women among new hires
+- Women among departures
+- Profit per FTE
+- Department net income
+- Open position ratio
+- High-potential share in senior roles
+- Succession cover in leadership
 
 ### Charts
+
 - Headcount by Department (bar)
 - Gender Distribution (donut)
 - Headcount by Location (bubble map)
 - Terminations by Reason (bar)
-- Tenure Distribution by band (bar)
-- Women Representation Snapshot (bar)
+- Tenure Distribution (bar)
+- Women Representation Snapshot **or** Salary Distribution by Department (feature-flag switch)
 - Performance Ratings (bar)
 
 ### Filters
-Department, Location, Status, and Report Year dropdowns — all charts update reactively.
 
-### Synthetic Data Preview & Verification
-- In-app **Synthetic Data Preview** section shows top rows for:
-  - Employees table
-  - Internal Moves table
-  - Terminations table
-  - Positions table
-  - Department Finance table
-- One-click CSV export buttons are available for each table to audit KPI calculations externally.
+- Department
+- Location
+- Status
+- Report Year
 
-### KPI Formula Definitions
-Scope legend: **filtered** = current dashboard filters (`Department`, `Location`, `Status`, `Report Year` where applicable); **company-wide** = entire dataset regardless of filters.
-
-- **Team Size** = count of filtered employees. *(Scope: filtered)*
-- **Currently Active** = count where `status == "Active"` in filtered employees. *(Scope: filtered)*
-- **Separated** = count where `status == "Terminated"` in filtered employees. *(Scope: filtered)*
-- **Terminations (Year)** = count of termination events in selected `report_year`. *(Scope: employees filtered by department/location)*
-- **Attrition (%)** = `separations_in_period / average_headcount * 100`, where `average_headcount = (headcount_at_period_start + headcount_at_period_end) / 2`. *(Scope: employees filtered by department/location; selected report year for separations)*
-- **Average Service** = mean of `tenure_years` in filtered employees. *(Scope: filtered)*
-- **Internal role fills (YTD) (%)** = `internal_moves_in_selected_year_for_filtered_employees / filtered_employee_count * 100`. *(Scope: filtered denominator; selected-year events matched to filtered employees)*
-- **Women in leadership roles (%)** = `women_in_senior_roles / total_senior_roles * 100`. *(Scope: filtered)*
-- **Women promoted this year (%)** = `women_promoted / total_promoted * 100`. *(Scope: filtered)*
-- **Women among new hires (%)** = `women_hired_in_report_year / total_hired_in_report_year * 100`. *(Scope: filtered + selected report year)*
-- **Women among departures (%)** = `women_exits / total_exits * 100`. *(Scope: filtered; departures sourced from terminations table in selected report year)*
-- **Open-role pressure (%)** = `open_positions / total_positions` (filtered by department/location) `* 100`. *(Scope: positions table filtered by department/location only)*
-- **Profit per FTE** = `department_net_income / department_fte`. *(Scope: department finance table, selected report year, optionally department-filtered)*
+All filters trigger one callback (`update_dashboard`) and refresh all KPI cards + charts together.
 
 ---
 
-## Tech Stack
+## Code Architecture (How `app.py` Works)
 
-| Library | Purpose |
+This is the high-level flow:
+
+1. **Generate synthetic data** using NumPy/random (fixed seed for reproducibility).
+2. **Create derived fields** (`tenure_years`, `tenure_band`, employee status from terminations).
+3. **Build Dash layout** (header, filters, cards, charts, preview tables).
+4. **Register callback** that:
+   - reads filter values,
+   - computes KPI numbers,
+   - builds Plotly figures,
+   - returns all outputs in one function.
+5. **Run app** locally with `app.run(debug=True)`.
+
+### Why separate tables?
+
+Instead of putting everything in one employee table, the app uses event/fact tables:
+
+- `df` (employee master)
+- `terminations_df` (termination events)
+- `internal_moves_df` (mobility events)
+- `positions_df` (open/filled positions)
+- `department_finance_df` (department finance by year)
+
+This mirrors real analytics systems and makes KPI logic clearer (for example, attrition is based on termination events, not just employee status).
+
+---
+
+## Callback Walkthrough (`update_dashboard`)
+
+This is the most important function in the app. It takes filter values as inputs and returns all KPI cards + chart figures.
+
+### Step 1: Read filters and define period
+
+- Inputs: `dept`, `loc`, `status`, `report_year`
+- Convert `report_year` to integer
+- Build `period_start` (`Jan 1`) and `period_end` (`Dec 31`) for the selected year
+
+Why this matters: many HR metrics are period-based, so we need exact start/end dates.
+
+### Step 2: Build analysis scopes
+
+- `dff = apply_filters(...)` gives the main filtered employee dataset
+- `employee_scope` is built from department/location filters to align event matching
+- `terminations_year_scope` filters termination events to selected year + employee scope
+- `positions_scope` and `finance_scope` are filtered separately because they come from different tables
+
+Why this matters: each KPI should use the right table and the right scope, not just one global dataframe.
+
+### Step 3: Compute headcount states for attrition denominator
+
+- Find employee IDs hired before period start/end
+- Remove IDs terminated before start/end
+- Compute:
+  - `start_headcount`
+  - `end_headcount`
+  - `average_headcount = (start + end) / 2`
+
+Why this matters: average headcount is more stable and fair than using only start or end headcount.
+
+### Step 4: Compute KPI numerators and rates
+
+- `separations_in_period` from `terminations_year_scope`
+- `voluntary_separations` from termination reason
+- `turnover` and `voluntary_termination_ratio` both use `average_headcount`
+- Women metrics use helper functions:
+  - `pct(mask)` for simple percentages
+  - `pct_with_denominator(num_mask, den_mask)` for ratio metrics with explicit denominator
+
+Why this matters: the helper functions prevent duplicated logic and keep formulas readable.
+
+### Step 5: Compute event-based and finance/position metrics
+
+- Internal fills: count move events in selected year for employees in current scope
+- Vacancy ratio: open positions / total positions from `positions_df`
+- Profit metrics: finance totals from `department_finance_df` for selected year
+
+Why this matters: this shows a practical mini data warehouse pattern (different fact tables feeding one dashboard).
+
+### Step 6: Build UI component outputs
+
+- Build `kpis` list (cards)
+- Build `strategic_tiles` list
+- Build each Plotly figure (`dept_bar`, `gender_pie`, `location_bar`, etc.)
+- Return all outputs in the exact order declared in `@app.callback`
+
+Why this matters: in Dash, output order must match return order exactly.
+
+### Step 7: Feature-flagged middle chart
+
+- If `SHOW_SALARY = True`: show salary distribution by department
+- Else: show women representation snapshot
+
+Why this matters: this is a clean way to swap features without rewriting layout logic.
+
+---
+
+## KPI Calculations (Explained)
+
+### Scope legend
+
+- **Filtered scope**: applies current Department / Location / Status filters
+- **Year scope**: applies selected Report Year
+
+### Core formulas used in code
+
+- **Terminations (Year)**
+  - Count rows in `terminations_df` where `termination_date.year == report_year`
+  - Then match to filtered employee scope
+
+- **Attrition (%)**
+  - `attrition = separations_in_period / average_headcount * 100`
+  - `average_headcount = (start_headcount + end_headcount) / 2`
+  - This is a standard HR approach because it avoids bias from growth/shrink during the year
+
+- **Voluntary termination ratio YTD (%)**
+  - `voluntary_separations / average_headcount * 100`
+  - Same denominator as attrition for consistency
+
+- **Average Service**
+  - Mean of `tenure_years` in filtered employees
+
+- **Internal role fills (YTD)**
+  - Count internal move events in selected year for employees in filtered scope
+  - Divide by filtered employee count
+
+- **Women in leadership / promotions / hires / departures**
+  - Each metric uses `numerator / denominator` with context-specific denominator
+  - Example: women in leadership = women in senior roles / all senior roles
+
+- **Open position ratio (%)**
+  - `open_positions / total_positions * 100`
+  - Uses `positions_df` filtered by department/location
+
+- **Profit per FTE**
+  - `department_net_income / department_fte`
+  - Uses selected report year, optional department filter
+
+---
+
+## Chart Logic (How to Explain It)
+
+- **Department colors**: neutral palette by default; accent yellow highlights the largest department.
+- **Women Representation Snapshot**: `Workforce` bar intentionally uses accent yellow for emphasis.
+- **Gender donut**: explicit color map for stable category colors across filter changes.
+- **Location map**: bubble size = headcount, custom geo styling for cleaner borders.
+- **Performance bars**: explicit map (`Exceeds`, `Meets`, `Below`) so colors are consistent every run.
+
+Tip for presentations: explain each chart as *question → calculation → visual encoding*.
+
+Example:
+- Question: “Where is our workforce concentrated?”
+- Calculation: count employees by location
+- Encoding: map marker size and color by count
+
+---
+
+## Synthetic Data Preview & Verification
+
+The app includes a **Synthetic Data Preview** section with top rows and CSV download for each table:
+
+- Employees
+- Terminations
+- Internal Moves
+- Positions
+- Department Finance
+
+Use this to verify KPI calculations manually in Excel/Pandas when learning.
+
+---
+
+## Tech Stack (Why these tools)
+
+| Tool | Why it is used |
 |---|---|
-| Dash | Web framework & reactive callbacks |
-| Plotly Express | Interactive charts |
-| Pandas | Data wrangling |
-| NumPy | Random sample generation |
-| Gunicorn | Production WSGI server (Render deployment) |
+| Dash | Python-first web UI framework with reactive callbacks |
+| Plotly Express | Quick interactive chart creation with clean APIs |
+| Pandas | Filtering, grouping, and KPI math |
+| NumPy + random | Fast synthetic data generation with controlled distributions |
+| Gunicorn | Production web server for Render deployment |
 
 ---
 
 ## Quick Start (Local)
 
 ```bash
-# 1. Clone the repo
+# 1) Clone
 git clone https://github.com/HYHYHYHYHYHYHYHYHY/hr-workforce-dashboard.git
 cd hr-workforce-dashboard
 
-# 2. Install dependencies
+# 2) Install deps
 pip install -r requirements.txt
 
-# 3. Run the dashboard
+# 3) Run app
 python app.py
 ```
 
-Then open your browser at **http://127.0.0.1:8050**
+Open: **http://127.0.0.1:8050**
 
 ---
 
 ## Deployment (Render)
 
-This app is production-ready for deployment on [Render](https://render.com) (free tier).
+1. Connect the repo as a **Web Service**
+2. Build command: `pip install -r requirements.txt`
+3. Start command: `gunicorn app:server`
+4. Deploy
 
-1. Connect your GitHub repo to Render as a **Web Service**
-2. Set **Build command:** `pip install -r requirements.txt`
-3. Set **Start command:** `gunicorn app:server`
-4. Deploy — Render provides a public URL automatically
-
-The `server = app.server` line in `app.py` exposes the underlying Flask server object that Gunicorn needs.
-
----
-
-## Portfolio Embed (GitHub Pages / Portfolio Site)
-
-To embed this dashboard as a live, interactive component on your portfolio page:
-
-```html
-<iframe
-  src="https://hr-workforce-dashboard.onrender.com"
-  width="100%"
-  height="800px"
-  frameborder="0"
-  style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-</iframe>
-```
-
-> **Why iframe?** Visitors get a fully interactive dashboard without leaving your portfolio page — no installs, no downloads. Recruiters see your skills in action immediately.
-
----
-
-## Sample Data
-
-The dashboard uses synthetic, reproducible sample data (seed `42`) — privacy-safe and suitable for demos.
-
-**Employees table (`df`) fields:** `employee_id`, `name`, `department`, `location`, `gender`, `status`, `hire_date`, `salary`, `age`, `performance`, `tenure_years`, `tenure_band`, `is_senior_role`, `promoted_ytd`, `high_potential`, `successor_ready`
-
-**Internal moves table (`internal_moves_df`) fields:** `employee_id`, `move_date`, `move_type`
-
-**Terminations table (`terminations_df`) fields:** `employee_id`, `termination_date`, `termination_reason`
-
-**Positions table (`positions_df`) fields:** `position_id`, `department`, `location`, `is_open`
-
-**Department finance table (`department_finance_df`) fields:** `report_year`, `department`, `department_fte`, `department_net_income`
+`server = app.server` exposes the Flask server object required by Gunicorn.
 
 ---
 
 ## Project Structure
 
-```
+```text
 hr-workforce-dashboard/
-├── app.py            # Main dashboard application
-├── requirements.txt  # Python dependencies
-└── README.md
+├── app.py            # Data generation + layout + callbacks
+├── requirements.txt  # Dependencies
+└── README.md         # Project and learning documentation
 ```
 
 ---
 
-## Skills Demonstrated
+## Suggested Talking Track (for interviews / demos)
 
-- Interactive dashboard design (filter-driven reactive updates)
-- Data wrangling with Pandas (`groupby`, `cut`, `value_counts`)
-- Multi-chart layouts with Plotly Express (bar, pie/donut, horizontal bar)
-- KPI card components with conditional colour coding
-- Clean, Power BI-inspired colour palette and layout
-- Production deployment with Gunicorn on Render
-- Portfolio integration via iframe embed
+1. Start with **business objective**: monitor workforce health and talent pipeline.
+2. Explain **data model**: event tables separated from employee master.
+3. Walk through **one KPI deeply** (attrition with average headcount denominator).
+4. Show **interactive filtering** and how one callback drives the whole dashboard.
+5. Highlight **engineering choices**: reproducible synthetic data, explicit color maps, downloadable source tables.
 
 ---
 
-*Built as a portfolio project — sample data only.*
+Built as a portfolio and learning project with synthetic data only.

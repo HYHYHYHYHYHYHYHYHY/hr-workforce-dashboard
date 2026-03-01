@@ -608,7 +608,7 @@ def update_dashboard(dept, loc, status, report_year):
         kpi_card("Currently Active", active,   color=COLORS["success"]),
         # kpi_card("Separated", terminated,      color=COLORS["danger"]),
         kpi_card("Terminations YTD", separations_in_period, color=COLORS["danger"]),
-        kpi_card("Attrition", turnover,        color=COLORS["danger"]),
+        kpi_card("Attrition YTD", turnover,        color=COLORS["danger"]),
         kpi_card("Voluntary termination ratio YTD", voluntary_termination_ratio, color=COLORS["danger"]),
         kpi_card("Average Service", avg_tenure, color="#8764B8"),
     ]
