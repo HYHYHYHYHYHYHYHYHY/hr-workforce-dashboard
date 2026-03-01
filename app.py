@@ -8,6 +8,7 @@ import random
 
 SHOW_SALARY = False
 MIDDLE_CHART_ID = "salary-box" if SHOW_SALARY else "women-metrics-bar"
+CONTENT_MAX_WIDTH = "1680px"
 
 # ── Reproducible sample data ────────────────────────────────────────────────
 random.seed(42)
@@ -219,9 +220,10 @@ app.layout = html.Div(
         ),
         # Filters
         html.Div(
-                 style={"backgroundColor": COLORS["surface"], "padding": "12px 32px",
-                   "display": "flex", "gap": "24px", "flexWrap": "wrap",
-                     "borderBottom": f"1px solid {COLORS['border']}"},
+                                 style={"backgroundColor": COLORS["surface"], "padding": "12px 32px",
+                                     "display": "flex", "gap": "24px", "flexWrap": "wrap",
+                                         "borderBottom": f"1px solid {COLORS['border']}",
+                                         "maxWidth": CONTENT_MAX_WIDTH, "margin": "0 auto", "width": "100%", "boxSizing": "border-box"},
             children=[
                 html.Div([
                     html.Label("Department", style={"fontWeight": "600", "fontSize": "12px"}),
@@ -266,57 +268,63 @@ app.layout = html.Div(
         # KPI row
         html.Div(id="kpi-row",
                  style={"display": "flex", "gap": "16px",
-                        "padding": "24px 32px 8px", "flexWrap": "wrap"}),
+                   "padding": "24px 32px 8px", "flexWrap": "wrap",
+                   "maxWidth": CONTENT_MAX_WIDTH, "margin": "0 auto", "width": "100%", "boxSizing": "border-box"}),
          # Strategic metric tiles
          html.Div(id="strategic-metrics-grid",
                style={"display": "grid",
-                   "gridTemplateColumns": "repeat(auto-fill, minmax(210px, 210px))",
-                   "justifyContent": "space-between",
+                 "gridTemplateColumns": "repeat(auto-fit, minmax(210px, 1fr))",
                    "gap": "10px",
-                   "padding": "8px 32px 12px"}),
+                 "padding": "8px 32px 12px",
+                 "maxWidth": CONTENT_MAX_WIDTH, "margin": "0 auto", "width": "100%", "boxSizing": "border-box"}),
         # Charts row 1
         html.Div(
-            style={"display": "flex", "gap": "16px",
-                   "padding": "8px 32px", "flexWrap": "wrap"},
+            style={"display": "grid", "gap": "16px",
+                 "gridTemplateColumns": "repeat(3, minmax(0, 1fr))",
+                 "padding": "8px 32px",
+                 "maxWidth": CONTENT_MAX_WIDTH, "margin": "0 auto", "width": "100%", "boxSizing": "border-box"},
             children=[
                 html.Div(dcc.Graph(id="dept-bar"),
-                         style={"flex": "1 1 420px", "backgroundColor": "white",
+                    style={"backgroundColor": "white",
                                 "borderRadius": "8px",
                                 "boxShadow": "0 2px 6px rgba(0,0,0,.08)"}),
                 html.Div(dcc.Graph(id="gender-pie"),
-                         style={"flex": "0 1 340px", "backgroundColor": "white",
+                    style={"backgroundColor": "white",
                                 "borderRadius": "8px",
                                 "boxShadow": "0 2px 6px rgba(0,0,0,.08)"}),
-                html.Div(dcc.Graph(id="location-bar"),
-                         style={"flex": "1 1 380px", "backgroundColor": "white",
+                html.Div(dcc.Graph(id="termination-reason-bar"),
+                    style={"backgroundColor": "white",
                                 "borderRadius": "8px",
                                 "boxShadow": "0 2px 6px rgba(0,0,0,.08)"}),
             ],
         ),
         # Charts row 2
         html.Div(
-            style={"display": "flex", "gap": "16px",
-                   "padding": "8px 32px 32px", "flexWrap": "wrap"},
+            style={"display": "grid", "gap": "16px",
+                 "gridTemplateColumns": "repeat(3, minmax(0, 1fr))",
+                 "padding": "8px 32px 32px",
+                 "maxWidth": CONTENT_MAX_WIDTH, "margin": "0 auto", "width": "100%", "boxSizing": "border-box"},
             children=[
                 html.Div(dcc.Graph(id="tenure-bar"),
-                         style={"flex": "1 1 380px", "backgroundColor": "white",
+                    style={"backgroundColor": "white",
                                 "borderRadius": "8px",
                                 "boxShadow": "0 2px 6px rgba(0,0,0,.08)"}),
                 html.Div(dcc.Graph(id=MIDDLE_CHART_ID),
-                         style={"flex": "1 1 420px", "backgroundColor": "white",
+                    style={"backgroundColor": "white",
                                 "borderRadius": "8px",
                                 "boxShadow": "0 2px 6px rgba(0,0,0,.08)"}),
                 html.Div(dcc.Graph(id="perf-bar"),
-                         style={"flex": "0 1 340px", "backgroundColor": "white",
+                    style={"backgroundColor": "white",
                                 "borderRadius": "8px",
                                 "boxShadow": "0 2px 6px rgba(0,0,0,.08)"}),
             ],
         ),
         # Termination chart
         html.Div(
-            style={"padding": "0 32px 16px"},
+             style={"padding": "0 32px 16px",
+                 "maxWidth": CONTENT_MAX_WIDTH, "margin": "0 auto", "width": "100%", "boxSizing": "border-box"},
             children=[
-                html.Div(dcc.Graph(id="termination-reason-bar"),
+                html.Div(dcc.Graph(id="location-bar"),
                          style={"backgroundColor": "white",
                                 "borderRadius": "8px",
                                 "boxShadow": "0 2px 6px rgba(0,0,0,.08)"}),
@@ -324,7 +332,8 @@ app.layout = html.Div(
         ),
         # Synthetic data preview
         html.Div(
-            style={"padding": "0 32px 32px"},
+            style={"padding": "0 32px 32px",
+                   "maxWidth": CONTENT_MAX_WIDTH, "margin": "0 auto", "width": "100%", "boxSizing": "border-box"},
             children=[
                 html.H3("Synthetic Data Preview", style={"margin": "8px 0 12px", "color": COLORS["text"]}),
                 html.Div(
@@ -718,6 +727,7 @@ def update_dashboard(dept, loc, status, report_year):
         coastlinewidth=0.8,
         showframe=False,
         domain={"x": [0.0, 1.0], "y": [0.0, 1.0]},
+        fitbounds="locations",
     )
     location_bar.update_layout(**location_layout)
     location_bar.update_traces(marker=dict(line=dict(color="#BFC8C7", width=0.8)))
