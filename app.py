@@ -53,6 +53,7 @@ COLORS = {
 }
 
 app = dash.Dash(__name__, title="HR Workforce Dashboard")
+server = app.server
 
 app.layout = html.Div(
     style={"backgroundColor": COLORS["bg"],
@@ -261,7 +262,7 @@ def update_dashboard(dept, loc, status):
     # Performance ratings
     perf_order = ["Exceeds", "Meets", "Below"]
     pc = (dff["performance"].value_counts()
-          .reindex(perf_order, fill_value=0).reset_index())
+          .reindex(perf_order, fill_value=0).reset_index())h
     pc.columns = ["rating", "count"]
     perf_bar = px.bar(pc, x="rating", y="count", title="Performance Ratings",
                       color="rating",
