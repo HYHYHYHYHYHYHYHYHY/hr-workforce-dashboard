@@ -583,13 +583,13 @@ def update_dashboard(dept, loc, status, report_year):
     tenure_as_of_year = ((period_end - year_end_scope["hire_date"]).dt.days / 365).clip(lower=0)
     avg_tenure = f"{tenure_as_of_year.mean():.1f} yrs" if len(year_end_scope) else "n/a"
 
-    women = dff["gender"].eq("Female")
     women_year_end = year_end_scope["gender"].eq("Female") if len(year_end_scope) else pd.Series(dtype=bool)
-    senior = dff["is_senior_role"]
-    promoted = dff["promoted_ytd"]
-    ytd_hires = dff["hire_date"].dt.year.eq(report_year)
+    senior_year_end = year_end_scope["is_senior_role"] if len(year_end_scope) else pd.Series(dtype=bool)
+    promoted_year_end = year_end_scope["promoted_ytd"] if len(year_end_scope) else pd.Series(dtype=bool)
+    ytd_hires_year_end = year_end_scope["hire_date"].dt.year.eq(report_year) if len(year_end_scope) else pd.Series(dtype=bool)
     terminated_ids_in_scope = set(terminations_year_scope["employee_id"])
-    ytd_exits = dff["employee_id"].isin(terminated_ids_in_scope)
+    ytd_exits_year_end = year_end_scope["employee_id"].isin(terminated_ids_in_scope) if len(year_end_scope) else pd.Series(dtype=bool)
+    senior = dff["is_senior_role"]
 
     def pct(mask):
         return f"{mask.mean() * 100:.1f}%" if len(mask) else "n/a"
@@ -601,10 +601,10 @@ def update_dashboard(dept, loc, status, report_year):
         numerator = int((num_mask & den_mask).sum())
         return f"{numerator / denominator * 100:.1f}%", f"{numerator} of {denominator}"
 
-    women_senior_pct, women_senior_note = pct_with_denominator(women, senior)
-    women_promoted_pct, women_promoted_note = pct_with_denominator(women, promoted)
-    women_hires_pct, women_hires_note = pct_with_denominator(women, ytd_hires)
-    women_exits_pct, women_exits_note = pct_with_denominator(women, ytd_exits)
+    women_senior_pct, women_senior_note = pct_with_denominator(women_year_end, senior_year_end)
+    women_promoted_pct, women_promoted_note = pct_with_denominator(women_year_end, promoted_year_end)
+    women_hires_pct, women_hires_note = pct_with_denominator(women_year_end, ytd_hires_year_end)
+    women_exits_pct, women_exits_note = pct_with_denominator(women_year_end, ytd_exits_year_end)
 
     moves_in_selected_year = internal_moves_df[internal_moves_df["move_date"].dt.year.eq(report_year)]
     employees_in_scope = set(dff["employee_id"])
@@ -701,8 +701,8 @@ def update_dashboard(dept, loc, status, report_year):
     gender_pie.update_traces(domain=dict(x=[0.15, 0.85], y=[0.18, 0.95]))
     gender_pie.update_traces(textposition="outside", textinfo="percent+label", marker=dict(line=dict(color="#D9E2E1", width=1)))
 
-    # Headcount by location (bubble map)
-    lo = dff.groupby("location", observed=True).size().reset_index(name="count")
+    # Headcount by location (bubble map) as of selected report year end.
+    lo = year_end_scope.groupby("location", observed=True).size().reset_index(name="count")
     lo["lat"] = lo["location"].map(lambda location: location_coords.get(location, {}).get("lat"))
     lo["lon"] = lo["location"].map(lambda location: location_coords.get(location, {}).get("lon"))
     lo = lo.dropna(subset=["lat", "lon"])
@@ -721,7 +721,7 @@ def update_dashboard(dept, loc, status, report_year):
             [1.0, "#00B7A8"],
         ],
         projection="natural earth",
-        title="Headcount by Location (Bubble Map)",
+        title=f"Headcount by Location (as of year-end {report_year})",
     )
     location_layout = base.copy()
     location_layout["margin"] = dict(l=6, r=6, t=48, b=6)
@@ -763,10 +763,17 @@ def update_dashboard(dept, loc, status, report_year):
     termination_reason_bar.update_xaxes(title="", showgrid=False)
     termination_reason_bar.update_yaxes(title="Employees", gridcolor="#D9E2E1", zerolinecolor="#D9E2E1")
 
-    # Tenure distribution
-    tc = dff["tenure_band"].value_counts().sort_index().reset_index()
+    # Tenure distribution as of selected report year end.
+    tenure_band_labels = ["<1 yr", "1-3 yrs", "3-5 yrs", "5-10 yrs", "10+ yrs"]
+    tenure_band_year = pd.cut(
+        tenure_as_of_year,
+        bins=[0, 1, 3, 5, 10, 99],
+        labels=tenure_band_labels,
+        include_lowest=True,
+    )
+    tc = tenure_band_year.value_counts().reindex(tenure_band_labels, fill_value=0).reset_index()
     tc.columns = ["band", "count"]
-    tenure_bar = px.bar(tc, x="band", y="count", title="Tenure Distribution",
+    tenure_bar = px.bar(tc, x="band", y="count", title=f"Tenure Distribution (as of year-end {report_year})",
                         color="band",
                         color_discrete_sequence=["#D9F2EE", "#BFEAE3", "#9EDFD3", "#7BCFC5", "#59C7BC"])
     tenure_bar.update_layout(**base, showlegend=False)
@@ -786,41 +793,52 @@ def update_dashboard(dept, loc, status, report_year):
             {
                 "metric": [
                     "Workforce",
-                    "Leadership",
-                    "Promotions",
+                    "Leadership (Snapshot)",
+                    "Promotions (Snapshot)",
                     "New Hires",
                     "Departures",
                 ],
                 "share": [
-                    (women.mean() * 100) if total else 0,
-                    ((women & senior).sum() / senior.sum() * 100) if senior.sum() else 0,
-                    ((women & promoted).sum() / promoted.sum() * 100) if promoted.sum() else 0,
-                    ((women & ytd_hires).sum() / ytd_hires.sum() * 100) if ytd_hires.sum() else 0,
-                    ((women & ytd_exits).sum() / ytd_exits.sum() * 100) if ytd_exits.sum() else 0,
+                    (women_year_end.mean() * 100) if len(year_end_scope) else 0,
+                    ((women_year_end & senior_year_end).sum() / senior_year_end.sum() * 100) if senior_year_end.sum() else 0,
+                    ((women_year_end & promoted_year_end).sum() / promoted_year_end.sum() * 100) if promoted_year_end.sum() else 0,
+                    ((women_year_end & ytd_hires_year_end).sum() / ytd_hires_year_end.sum() * 100) if ytd_hires_year_end.sum() else 0,
+                    ((women_year_end & ytd_exits_year_end).sum() / ytd_exits_year_end.sum() * 100) if ytd_exits_year_end.sum() else 0,
                 ],
             }
         )
+
+        women_snapshot_color_map = {
+            "Workforce": WOMEN_SNAPSHOT_COLOR_MAP["Workforce"],
+            "Leadership (Snapshot)": WOMEN_SNAPSHOT_COLOR_MAP["Leadership"],
+            "Promotions (Snapshot)": WOMEN_SNAPSHOT_COLOR_MAP["Promotions"],
+            "New Hires": WOMEN_SNAPSHOT_COLOR_MAP["New Hires"],
+            "Departures": WOMEN_SNAPSHOT_COLOR_MAP["Departures"],
+        }
 
         middle_chart = px.bar(
             women_metric_df,
             x="metric",
             y="share",
-            title="Women Representation Snapshot",
+            title=f"Women Representation ({report_year})",
             color="metric",
-            color_discrete_map=WOMEN_SNAPSHOT_COLOR_MAP,
+            color_discrete_map=women_snapshot_color_map,
             text="share",
         )
-        middle_chart.update_layout(**base, showlegend=False)
+        women_layout = base.copy()
+        women_layout["legend"] = dict(orientation="h", yanchor="bottom", y=-0.22, xanchor="center", x=0.5)
+        women_layout["margin"] = dict(l=16, r=16, t=40, b=76)
+        middle_chart.update_layout(**women_layout, showlegend=True)
         middle_chart.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
         middle_chart.update_xaxes(title="", showgrid=False)
         middle_chart.update_yaxes(title="Share (%)", range=[0, 100], gridcolor="#D9E2E1", zerolinecolor="#D9E2E1")
 
-    # Performance ratings
+    # Performance ratings as of selected report year end.
     perf_order = ["Below", "Meets","Exceeds"]
-    pc = (dff["performance"].value_counts()
+    pc = (year_end_scope["performance"].value_counts()
           .reindex(perf_order, fill_value=0).reset_index())
     pc.columns = ["rating", "count"]
-    perf_bar = px.bar(pc, x="rating", y="count", title="Performance Ratings",
+    perf_bar = px.bar(pc, x="rating", y="count", title=f"Performance Ratings (as of year-end {report_year})",
                       color="rating",
                       color_discrete_map=PERFORMANCE_COLOR_MAP)
     perf_bar.update_layout(**base, showlegend=False)
