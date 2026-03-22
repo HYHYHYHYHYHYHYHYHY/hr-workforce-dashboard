@@ -27,11 +27,11 @@ If you are learning coding/data apps, this project is useful because it combines
 
 ### KPI Cards (top row)
 
-- **Currently Active**
-- **Terminations (Year)**
-- **Attrition**
-- **Voluntary termination ratio YTD**
-- **Average Service**
+- **Currently Active (as of year-end)**
+- **Terminations (Report Year)**
+- **Attrition (Report Year)**
+- **Voluntary termination ratio (Report Year)**
+- **Average Service (as of year-end)**
 - **Average Pay** *(only shown when `SHOW_SALARY = True`)*
 
 ### Strategic Metric Tiles
@@ -39,14 +39,14 @@ If you are learning coding/data apps, this project is useful because it combines
 - Internal role fills (YTD)
 - Women across workforce
 - Women in leadership roles
-- Women promoted this year
+- Women promoted YTD
 - Women among new hires
 - Women among departures
 - Profit per FTE
 - Department net income
-- Open position ratio
-- High-potential share in senior roles
-- Succession cover in leadership
+- Open position ratio (Snapshot)
+- High-potential share in senior roles (Snapshot)
+- Succession cover in leadership (Snapshot)
 
 ### Charts
 
@@ -171,11 +171,17 @@ Why this matters: this is a clean way to swap features without rewriting layout 
 ### Scope legend
 
 - **Filtered scope**: applies current Department / Location / Status filters
-- **Year scope**: applies selected Report Year
+- **Year scope**: applies selected Report Year period
+- **Year-end scope**: applies selected Report Year as-of `Dec 31`
+- **Snapshot metrics**: current-state only where no historical table exists
 
 ### Core formulas used in code
 
-- **Terminations (Year)**
+- **Currently Active (as of year-end)**
+  - Count employees active on `Dec 31` of `report_year`
+  - Uses `hire_date` and termination events to rebuild status as-of year-end
+
+- **Terminations (Report Year)**
   - Count rows in `terminations_df` where `termination_date.year == report_year`
   - Then match to filtered employee scope
 
@@ -184,16 +190,20 @@ Why this matters: this is a clean way to swap features without rewriting layout 
   - `average_headcount = (start_headcount + end_headcount) / 2`
   - This is a standard HR approach because it avoids bias from growth/shrink during the year
 
-- **Voluntary termination ratio YTD (%)**
+- **Voluntary termination ratio (Report Year) (%)**
   - `voluntary_separations / average_headcount * 100`
   - Same denominator as attrition for consistency
 
-- **Average Service**
-  - Mean of `tenure_years` in filtered employees
+- **Average Service (as of year-end)**
+  - For each employee in year-end scope: `(period_end - hire_date)` in years
+  - KPI is the mean of that year-end tenure
 
 - **Internal role fills (YTD)**
   - Count internal move events in selected year for employees in filtered scope
   - Divide by filtered employee count
+
+- **Women across workforce**
+  - Female share in year-end scope (`as of Dec 31` for selected year)
 
 - **Women in leadership / promotions / hires / departures**
   - Each metric uses `numerator / denominator` with context-specific denominator
@@ -202,6 +212,11 @@ Why this matters: this is a clean way to swap features without rewriting layout 
 - **Open position ratio (%)**
   - `open_positions / total_positions * 100`
   - Uses `positions_df` filtered by department/location
+  - Labeled **(Snapshot)** because there is no position-status history by year
+
+- **High-potential share in senior roles / Succession cover in leadership**
+  - Computed from current employee attributes in filtered scope
+  - Labeled **(Snapshot)** because there is no historical effective-dated table
 
 - **Profit per FTE**
   - `department_net_income / department_fte`
