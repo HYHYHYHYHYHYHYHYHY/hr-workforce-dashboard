@@ -550,16 +550,26 @@ def update_dashboard(dept, loc, status, report_year):
         "Sydney": {"lat": -33.8688, "lon": 151.2093},
     }
 
-    total      = len(dff)
-    active     = int((dff["status"] == "Active").sum())
-    terminated = int((dff["status"] == "Terminated").sum())
-    separations_in_period = int(len(terminations_year_scope))
-    voluntary_separations = int((terminations_year_scope["termination_reason"] == "Voluntary").sum())
-
     hired_before_start_ids = set(employee_scope.loc[employee_scope["hire_date"] < period_start, "employee_id"])
     hired_before_end_ids = set(employee_scope.loc[employee_scope["hire_date"] <= period_end, "employee_id"])
     terminated_before_start_ids = set(terminations_all_scope.loc[terminations_all_scope["termination_date"] < period_start, "employee_id"])
     terminated_before_end_ids = set(terminations_all_scope.loc[terminations_all_scope["termination_date"] <= period_end, "employee_id"])
+
+    # Year-end population is used for KPIs that should honor the selected report year.
+    year_end_scope = employee_scope[employee_scope["hire_date"] <= period_end].copy()
+    year_end_scope["status_as_of_year_end"] = np.where(
+        year_end_scope["employee_id"].isin(terminated_before_end_ids),
+        "Terminated",
+        "Active",
+    )
+    if status != "All":
+        year_end_scope = year_end_scope[year_end_scope["status_as_of_year_end"] == status]
+
+    total      = len(dff)
+    active     = int((year_end_scope["status_as_of_year_end"] == "Active").sum())
+    terminated = int((dff["status"] == "Terminated").sum())
+    separations_in_period = int(len(terminations_year_scope))
+    voluntary_separations = int((terminations_year_scope["termination_reason"] == "Voluntary").sum())
 
     start_headcount = len(hired_before_start_ids - terminated_before_start_ids)
     end_headcount = len(hired_before_end_ids - terminated_before_end_ids)
@@ -570,9 +580,11 @@ def update_dashboard(dept, loc, status, report_year):
         if average_headcount else "n/a"
     )
     avg_salary = f"${dff['salary'].mean():,.0f}" if total else "n/a"
-    avg_tenure = f"{dff['tenure_years'].mean():.1f} yrs" if total else "n/a"
+    tenure_as_of_year = ((period_end - year_end_scope["hire_date"]).dt.days / 365).clip(lower=0)
+    avg_tenure = f"{tenure_as_of_year.mean():.1f} yrs" if len(year_end_scope) else "n/a"
 
     women = dff["gender"].eq("Female")
+    women_year_end = year_end_scope["gender"].eq("Female") if len(year_end_scope) else pd.Series(dtype=bool)
     senior = dff["is_senior_role"]
     promoted = dff["promoted_ytd"]
     ytd_hires = dff["hire_date"].dt.year.eq(report_year)
@@ -600,7 +612,7 @@ def update_dashboard(dept, loc, status, report_year):
         moves_in_selected_year["employee_id"].isin(employees_in_scope).sum()
     )
     internal_fill_pct = f"{internal_fills_count / total * 100:.1f}%" if total else "n/a"
-    women_workforce_pct = pct(women) if total else "n/a"
+    women_workforce_pct = pct(women_year_end) if len(year_end_scope) else "n/a"
     total_positions_in_scope = len(positions_scope)
     open_positions_in_scope = int(positions_scope["is_open"].sum())
     vacancy_pct = f"{open_positions_in_scope / total_positions_in_scope * 100:.1f}%" if total_positions_in_scope else "n/a"
@@ -614,12 +626,12 @@ def update_dashboard(dept, loc, status, report_year):
 
     kpis = [
         # kpi_card("Team Size", total,          color=COLORS["primary"]),
-        kpi_card("Currently Active", active,   color=COLORS["success"]),
+        kpi_card("Currently Active (as of year-end)", active,   color=COLORS["success"]),
         # kpi_card("Separated", terminated,      color=COLORS["danger"]),
-        kpi_card("Terminations YTD", separations_in_period, color=COLORS["danger"]),
-        kpi_card("Attrition YTD", turnover,        color=COLORS["danger"]),
-        kpi_card("Voluntary termination ratio YTD", voluntary_termination_ratio, color=COLORS["danger"]),
-        kpi_card("Average Service", avg_tenure, color="#8764B8"),
+        kpi_card("Terminations (Report Year)", separations_in_period, color=COLORS["danger"]),
+        kpi_card("Attrition (Report Year)", turnover,        color=COLORS["danger"]),
+        kpi_card("Voluntary termination ratio (Report Year)", voluntary_termination_ratio, color=COLORS["danger"]),
+        kpi_card("Average Service (as of year-end)", avg_tenure, color="#8764B8"),
     ]
     if SHOW_SALARY:
         kpis.insert(4, kpi_card("Average Pay", avg_salary, color=COLORS["secondary"]))
@@ -628,7 +640,7 @@ def update_dashboard(dept, loc, status, report_year):
         metric_tile("Internal role fills YTD", internal_fill_pct,
                     f"{internal_fills_count} event(s) in {report_year}", COLORS["primary"]),
         metric_tile("Women across workforce", women_workforce_pct,
-                    "Current filtered population", COLORS["success"]),
+                f"As of year-end {report_year}", COLORS["success"]),
         metric_tile("Women in leadership roles", women_senior_pct,
                     women_senior_note, COLORS["success"]),
         metric_tile("Women promoted YTD", women_promoted_pct,
@@ -641,12 +653,12 @@ def update_dashboard(dept, loc, status, report_year):
                 f"{report_year} finance scope", COLORS["primary"]),
         metric_tile("Department net income", net_income_display,
                 f"{report_year} finance scope", COLORS["primary"]),
-        metric_tile("Open position ratio", vacancy_pct,
-                    f"{open_positions_in_scope} of {total_positions_in_scope} positions open", COLORS["primary"]),
-        metric_tile("High-potential share in senior roles", hipos_in_senior_pct,
-                    hipos_note, "#C239B3"),
-        metric_tile("Succession cover in leadership", succession_pct,
-                    succession_note, "#C239B3"),
+        metric_tile("Open position ratio (Snapshot)", vacancy_pct,
+                f"{open_positions_in_scope} of {total_positions_in_scope} positions open - current-state only", COLORS["primary"]),
+        metric_tile("High-potential share in senior roles (Snapshot)", hipos_in_senior_pct,
+                f"{hipos_note} - current-state only", "#C239B3"),
+        metric_tile("Succession cover in leadership (Snapshot)", succession_pct,
+                f"{succession_note} - current-state only", "#C239B3"),
    ]
     base = dict(
         paper_bgcolor=COLORS["surface"],
